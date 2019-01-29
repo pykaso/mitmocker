@@ -11,10 +11,7 @@ context_flow = contextvars.ContextVar('context_flow')
 # import of useful methods which could be used in pjson templates
 from random import randint, uniform
 from datetime import datetime, timezone, timedelta
-
-
-#WORK_DIR = os.path.dirname(os.path.realpath(__file__))
-#DATA_DIR = os.path.join(WORK_DIR, 'data')
+import math
 
 MOCKS = {}
 
@@ -72,7 +69,7 @@ class MitmMockServer(object):
 
                     with open(template_file, 'w') as template:
                         json.dump(json.loads(flow.response.text), template, indent=4, sort_keys=True, ensure_ascii=False)
-                    ctx.log.info('Response of "{0}" was saved to file: {1}'.format(flow.request.path, template_file))
+                    self.log('Response of "{0}" was saved to file: {1}'.format(flow.request.path, template_file))
                     _to_delete.append(name)
                     break
         
@@ -105,17 +102,17 @@ class MitmMockServer(object):
         template_name = self._get_template_name(name)
         template_file = os.path.join(self.data_dir, template_name)
 
-        ctx.log.warn('get_template: name={0}, meta={1}'.format(name, meta))
+        self.warn('get_template: name={0}, meta={1}'.format(name, meta))
 
         if os.path.exists(template_file):
             content = self._load_template(template_file)
             evaluated = self._evaluate_template(content)
             obj = json.loads(content)
-            ctx.log.info('Response to "{0}" served from mock file "{1}".'.format(_flow.request.path, template_file))
+            self.log('Response to "{0}" served from mock file "{1}".'.format(_flow.request.path, template_file))
             return obj
         else:
             if autocreate == False:
-                ctx.log.warn('Template file "{0}" not found. Mock file autocreate is disabled.')
+                self.warn('Template file "{0}" not found. Mock file autocreate is disabled.')
                 return None
             else:
                 _AUTOMOCK_QUEUE[name] = (_flow.request.path, method)
@@ -151,56 +148,59 @@ class MitmMockServer(object):
         try:
             expression = match.group(2)
 
+            if len(expression) == 0:
+                raise Exception('Expression can\'t be empty.')
+
             if '||' in expression:
                 expression, variable =  expression.split('||')
             else:
                 variable = None
 
-            ctx.log.info('matched: {0}'.format(expression))
+            self.log('Expression detected: "{0}"'.format(expression))
             if variable:
-                ctx.log.info('stored to variable: "{0}"'.format(variable))
+                self.log('Store expression result to variable named: "{0}"'.format(variable))
 
-            ctx.log.info('$ found: {0}'.format('$' in expression))
             if '$' in expression:
-                ctx.log.info('$ detected')
-                ctx.log.info(re.findall(r'\$[a-zA-Z]+', expression))
                 variables = [ var[1:] for var in re.findall(r'\$[a-zA-Z]+', expression)]
-                ctx.log.info('named variables detected : {0}'.format(variables))
+                if len(variables)>0:
+                    self.log('Named variables detected : {0}'.format(variables))
 
-                try:
-                    for variable in variables:
-                        ctx.log.info(variable)
+                    for variable_name in variables:
                         stored_variable = None
                         
-                        if hasattr(self, variable):
-                            stored_variable = getattr(self, variable)
-                        elif variable in globals():
-                            stored_variable = globals()[variable]
+                        if hasattr(self, variable_name):
+                            stored_variable = getattr(self, variable_name)
+                        elif variable_name in globals():
+                            stored_variable = globals()[variable_name]
 
                         if stored_variable:
-                            ctx.log.info('found = {0}'.format(stored_variable))
-                            expression = expression.replace('${0}'.format(variable), '{0}'.format(stored_variable))
-                            ctx.log.info(expression)
+                            #self.log('found existing variable "{0}"'.format(stored_variable))
+                            expression = expression.replace('${0}'.format(variable_name), '{0}'.format(stored_variable))
                         else:
-                            ctx.log.info('stored variable {0} not found:'.format(variable))
-                except Exception as e:
-                    ctx.log.warn(e)
+                            self.log('Variable name {0} not defined in object or globals.'.format(variable_name))
 
-                ctx.log.info('variables replaced : {0}'.format(expression))            
-
-            evaluated = eval(expression)
-            #ctx.log.info('evaluated: {0}'.format(evaluated))
+                    #self.log('variables replaced : {0}'.format(expression))            
+        
+            try:
+                expression = str(expression)
+                evaluated = eval(expression)
+                #self.log('Expression evaluated: {0}'.format(evaluated))
+            except Exception as e :
+                raise Exception('Expression evaluation failed with error: {0}'.format(e))
+                evaluated = expression
 
             if variable:
                 globals()[variable] = evaluated
 
             return "{0}".format(evaluated)
 
-        except:
-            print('Failed to evaluate expression "{0}".'.format(match.group()))
+        except Exception as e:
+            self.warn('Failed to evaluate expression "{0}". Error: {1}'.format(match.group(), e))
+
 
     def json_prettyprint(self, data):
         return simplejson.dumps(simplejson.loads(data), indent=4, sort_keys=False)
+
 
     def _get_template_name(self, name):
         return '{0}.{1}'.format(name, _TEMPLATE_EXTENSION)
@@ -221,3 +221,13 @@ class MitmMockServer(object):
         if len(result):
             key = list(result.keys())[0]
             return result[key]
+
+    
+    def log(self, message):
+        ctx.log.info(message)
+
+    
+    def warn(self, warning):
+        ctx.log.warn(warning)
+
+
