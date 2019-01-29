@@ -13,8 +13,8 @@ class MitmMockServerTest(unittest.TestCase):
 
     def setUp(self):
         self.srv = MitmMockServer(os.path.dirname(os.path.realpath(__file__)))
-        self.srv.log = lambda message: print('')
-        self.srv.warn = lambda message: print(message)
+        self.srv._log = lambda message: print(message)
+        self.srv._warn = lambda message: print(message)
 
     def test_match_empty(self):
         out = self.srv.match_func(match(''))

@@ -69,7 +69,7 @@ class MitmMockServer(object):
 
                     with open(template_file, 'w') as template:
                         json.dump(json.loads(flow.response.text), template, indent=4, sort_keys=True, ensure_ascii=False)
-                    self.log('Response of "{0}" was saved to file: {1}'.format(flow.request.path, template_file))
+                    self._log('Response of "{0}" was saved to file: {1}'.format(flow.request.path, template_file))
                     _to_delete.append(name)
                     break
         
@@ -102,17 +102,15 @@ class MitmMockServer(object):
         template_name = self._get_template_name(name)
         template_file = os.path.join(self.data_dir, template_name)
 
-        self.warn('get_template: name={0}, meta={1}'.format(name, meta))
-
         if os.path.exists(template_file):
             content = self._load_template(template_file)
             evaluated = self._evaluate_template(content)
-            obj = json.loads(content)
-            self.log('Response to "{0}" served from mock file "{1}".'.format(_flow.request.path, template_file))
+            obj = json.loads(evaluated)
+            self._log('Response to "{0}" served from mock file "{1}".'.format(_flow.request.path, template_file))
             return obj
         else:
             if autocreate == False:
-                self.warn('Template file "{0}" not found. Mock file autocreate is disabled.')
+                self._warn('Template file "{0}" not found. Mock file autocreate is disabled.')
                 return None
             else:
                 _AUTOMOCK_QUEUE[name] = (_flow.request.path, method)
@@ -156,14 +154,19 @@ class MitmMockServer(object):
             else:
                 variable = None
 
-            self.log('Expression detected: "{0}"'.format(expression))
+            self._log('Expression detected: "{0}"'.format(expression))
             if variable:
-                self.log('Store expression result to variable named: "{0}"'.format(variable))
+                self._log('Store expression result to variable named: "{0}"'.format(variable))
 
+            ignore_evaluation = False
+            
             if '$' in expression:
-                variables = [ var[1:] for var in re.findall(r'\$[a-zA-Z]+', expression)]
+                variables = [ var[1:] for var in re.findall(r'\$[_a-zA-Z]+', expression)]
+                
+                ignore_evaluation = re.match(r'^\$[_a-zA-Z]+$', expression) != None
+
                 if len(variables)>0:
-                    self.log('Named variables detected : {0}'.format(variables))
+                    self._log('Named variables detected : {0}'.format(variables))
 
                     for variable_name in variables:
                         stored_variable = None
@@ -174,20 +177,20 @@ class MitmMockServer(object):
                             stored_variable = globals()[variable_name]
 
                         if stored_variable:
-                            #self.log('found existing variable "{0}"'.format(stored_variable))
+                            #self._log('found existing variable "{0}"'.format(stored_variable))
                             expression = expression.replace('${0}'.format(variable_name), '{0}'.format(stored_variable))
                         else:
-                            self.log('Variable name {0} not defined in object or globals.'.format(variable_name))
+                            self._log('Variable name {0} not defined in object or globals.'.format(variable_name))
 
-                    #self.log('variables replaced : {0}'.format(expression))            
+                    #self._log('variables replaced : {0}'.format(expression))            
         
-            try:
-                expression = str(expression)
-                evaluated = eval(expression)
-                #self.log('Expression evaluated: {0}'.format(evaluated))
-            except Exception as e :
-                raise Exception('Expression evaluation failed with error: {0}'.format(e))
+            if ignore_evaluation:
                 evaluated = expression
+            else:
+                try:
+                    evaluated = eval(expression)
+                except Exception as e :
+                    raise Exception('Expression evaluation failed with error: {0}'.format(e))
 
             if variable:
                 globals()[variable] = evaluated
@@ -195,7 +198,7 @@ class MitmMockServer(object):
             return "{0}".format(evaluated)
 
         except Exception as e:
-            self.warn('Failed to evaluate expression "{0}". Error: {1}'.format(match.group(), e))
+            self._warn('Failed to evaluate expression "{0}". Error: {1}'.format(match.group(), e))
 
 
     def json_prettyprint(self, data):
@@ -213,6 +216,8 @@ class MitmMockServer(object):
 
     def _evaluate_template(self, templateContent):
         replaced = re.sub(r'(\{\{)([^}]+)(\}\})', self.match_func, templateContent)
+
+        self._warn(replaced)
         return replaced
 
 
@@ -223,11 +228,11 @@ class MitmMockServer(object):
             return result[key]
 
     
-    def log(self, message):
+    def _log(self, message):
         ctx.log.info(message)
 
     
-    def warn(self, warning):
+    def _warn(self, warning):
         ctx.log.warn(warning)
 
 
