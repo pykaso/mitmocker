@@ -19,21 +19,22 @@ Mitmocker is a mock server for MITM. Installation of MITM seems to be a good sta
 1. Create a python script with mock server using MITM scripting API.
 
 
-    from mitmocker import mock, MitmMockServer
-    import os
+        from mitmocker import mock, MitmMockServer
+        import os
 
-    class MinimalMockServer(MitmMockServer): 
+        class MinimalMockServer(MitmMockServer): 
 
-        def __init__(self):
-            super().__init__(os.path.dirname(os.path.realpath(__file__)))
+            def __init__(self):
+                super().__init__(os.path.dirname(os.path.realpath(__file__)))
 
-        @mock('/api/v1/')
-        def mock_all(self, flow):
-            return self.get_template()
+            @mock('/api/v1/')
+            def mock_all(self, flow):
+                return self.get_template()
 
-    addons = [
-        MinimalMockServer()
-    ]
+        addons = [
+            MinimalMockServer()
+        ]
+
 
 2. Run MITM in reverse mode with a created script. This starts the proxy on localhost and default port 8080.
 
